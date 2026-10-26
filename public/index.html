@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Multiplayer Tic-Tac-Toe</title>
+<style>
+  /* ── Reset & base ──────────────────────────── */
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body {
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    background: #0f0f1a;
+    color: #e0e0e0;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+  }
+
+  h1 {
+    font-size: 1.8rem;
+    margin-bottom: .3rem;
+    background: linear-gradient(135deg, #6c5ce7, #00cec9);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  .subtitle { font-size: .85rem; color: #888; margin-bottom: 1.6rem; }
+
+  /* ── Screens ───────────────────────────────── */
+  .screen { display:none; flex-direction:column; align-items:center; }
+  .screen.active { display:flex; }
+
+  /* ── Lobby ─────────────────────────────────── */
+  input, button {
+    font-size: 1rem;
+    padding: .65rem 1.2rem;
+    border: none;
+    border-radius: 10px;
+    outline: none;
+    margin: .35rem 0;
+    width: 260px;
+  }
+  input {
+    background: #1e1e2e;
+    color: #fff;
+    border: 1px solid #333;
+  }
+  input:focus { border-color: #6c5ce7; }
+  input::placeholder { color: #555; }
+
+  .btn-primary {
+    background: linear-gradient(135deg, #6c5ce7, #a855f7);
+    color: #fff;
+    cursor: pointer;
+    font-weight: 600;
+    transition: transform .1s, box-shadow .2s;
+  }
+  .btn-primary:hover { transform: scale(1.03); box-shadow: 0 4px 20px rgba(108,92,231,.4); }
+  .btn-secondary {
+    background: #1e1e2e;
+    color: #ccc;
+    cursor: pointer;
+    border: 1px solid #333;
+  }
+  .btn-secondary:hover { border-color: #6c5ce7; color: #fff; }
+
+  .or { color: #555; margin: .6rem 0; font-size: .85rem; }
+
+  /* ── Waiting ───────────────────────────────── */
+  .room-code-display {
+    font-size: 2.4rem;
+    font-weight: 800;
+    letter-spacing: .35em;
+    background: linear-gradient(135deg, #6c5ce7, #00cec9);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    margin: 1rem 0;
+  }
+  .copy-btn {
+    width: auto;
+    padding: .4rem .9rem;
+    font-size: .8rem;
+    background: #1e1e2e;
+    color: #aaa;
+    cursor: pointer;
+    border: 1px solid #333;
+  }
+  .copy-btn:hover { color: #fff; border-color: #6c5ce7; }
+  .waiting-msg { color: #888; margin-top: 1rem; font-size: .9rem; }
+  .spinner {
+    width: 28px; height: 28px;
+    border: 3px solid #333;
+    border-top-color: #6c5ce7;
+    border-radius: 50%;
+    animation: spin .8s linear infinite;
+    margin-top: 1rem;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── Game board ─────────────────────────────── */
+  .status {
+    font-size: 1.1rem;
+    margin-bottom: .8rem;
+    min-height: 1.5em;
+  }
+  .board {
+    display: grid;
+    grid-template-columns: repeat(3, 100px);
+    grid-template-rows: repeat(3, 100px);
+    gap: 6px;
+  }
+  .cell {
+    background: #1e1e2e;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 2.4rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background .15s, transform .1s;
+    user-select: none;
+  }
+  .cell:hover { background: #2a2a3d; }
+  .cell.taken { cursor: default; }
+  .cell.X { color: #6c5ce7; }
+  .cell.O { color: #00cec9; }
+  .cell.win { background: #2d2b55; animation: pop .35s ease; }
+  @keyframes pop { 0%{transform:scale(1)} 50%{transform:scale(1.15)} 100%{transform:scale(1)} }
+
+  .scores {
+    display: flex;
+    gap: 2rem;
+    margin-top: 1rem;
+    font-size: .9rem;
+  }
+  .scores span { color: #888; }
+  .scores .val { color: #fff; font-weight: 700; margin-left: .3rem; }
+
+  .btn-rematch {
+    margin-top: 1.2rem;
+    width: auto;
+    padding: .55rem 1.6rem;
+    display: none;
+  }
+
+  /* ── Error toast ───────────────────────────── */
+  .toast {
+    position: fixed;
+    bottom: 2rem;
+    background: #ff4757;
+    color: #fff;
+    padding: .6rem 1.4rem;
+    border-radius: 10px;
+    font-size: .9rem;
+    opacity: 0;
+    transition: opacity .3s;
+    pointer-events: none;
+  }
+  .toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+
+<!-- ── Lobby ──────────────────────────────────── -->
+<div id="lobby" class="screen active">
+  <h1>Tic-Tac-Toe</h1>
+  <p class="subtitle">Multiplayer · Real-time · Room Codes</p>
+
+  <input id="nameInput" type="text" placeholder="Your name" maxlength="16" />
+  <button class="btn-primary" onclick="createRoom()">Create Room</button>
+  <div class="or">— or —</div>
+  <input id="codeInput" type="text" placeholder="Room code" maxlength="4"
+         style="text-transform:uppercase; letter-spacing:.2em; text-align:center;" />
+  <button class="btn-secondary" onclick="joinRoom()">Join Room</button>
+</div>
+
+<!-- ── Waiting ────────────────────────────────── -->
+<div id="waiting" class="screen">
+  <h1>Room Created</h1>
+  <p class="subtitle">Share this code with your opponent</p>
+  <div class="room-code-display" id="roomCodeDisplay"></div>
+  <button class="copy-btn" onclick="copyCode()">📋 Copy code</button>
+  <div class="spinner"></div>
+  <p class="waiting-msg">Waiting for opponent to join…</p>
+</div>
+
+<!-- ── Game ────────────────────────────────────── -->
+<div id="game" class="screen">
+  <h1>Tic-Tac-Toe</h1>
+  <p class="status" id="status"></p>
+  <div class="board" id="board"></div>
+  <div class="scores">
+    <span id="p1score"></span>
+    <span id="p2score"></span>
+  </div>
+  <button class="btn-primary btn-rematch" id="rematchBtn" onclick="rematch()">Rematch</button>
+</div>
+
+<!-- ── Toast ───────────────────────────────────── -->
+<div class="toast" id="toast"></div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script>
+  const socket = io();
+
+  // ── State ─────────────────────────────────────
+  let myMark = null;      // "X" or "O"
+  let myIndex = null;     // 0 or 1
+  let myTurn = false;
+  let roomCode = null;
+  let players = [];
+  let scores = [0, 0];
+
+  // ── DOM refs ──────────────────────────────────
+  const $lobby   = document.getElementById("lobby");
+  const $waiting = document.getElementById("waiting");
+  const $game    = document.getElementById("game");
+  const $board   = document.getElementById("board");
+  const $status  = document.getElementById("status");
+  const $rematch = document.getElementById("rematchBtn");
+
+  function show(screen) {
+    [$lobby, $waiting, $game].forEach(s => s.classList.remove("active"));
+    screen.classList.add("active");
+  }
+
+  // ── Lobby actions ─────────────────────────────
+  function createRoom() {
+    const name = document.getElementById("nameInput").value.trim() || "Player 1";
+    socket.emit("create", name);
+  }
+  function joinRoom() {
+    const name = document.getElementById("nameInput").value.trim() || "Player 2";
+    const code = document.getElementById("codeInput").value.trim();
+    if (!code) return showToast("Enter a room code.");
+    socket.emit("join", { code, playerName: name });
+  }
+  function copyCode() {
+    navigator.clipboard.writeText(roomCode);
+    showToast("Copied!");
+  }
+
+  // ── Socket listeners ─────────────────────────
+  socket.on("created", ({ code, mark, index }) => {
+    roomCode = code;
+    myMark = mark;
+    myIndex = index;
+    document.getElementById("roomCodeDisplay").textContent = code;
+    show($waiting);
+  });
+
+  socket.on("joined", ({ code, mark, index }) => {
+    roomCode = code;
+    myMark = mark;
+    myIndex = index;
+    // game "start" event will follow immediately
+  });
+
+  socket.on("start", ({ board, turn, players: p }) => {
+    players = p;
+    renderBoard(board, turn);
+    show($game);
+    $rematch.style.display = "none";
+  });
+
+  socket.on("update", ({ board, turn }) => {
+    renderBoard(board, turn);
+  });
+
+  socket.on("gameOver", ({ board, result, players: p }) => {
+    players = p;
+    renderBoard(board, null, result);
+
+    if (result.mark === "draw") {
+      $status.textContent = "It's a draw!";
+    } else {
+      const winnerIdx = result.mark === "X" ? 0 : 1;
+      scores[winnerIdx]++;
+      $status.textContent = result.mark === myMark
+        ? "🎉 You win!"
+        : `${players[winnerIdx]} wins!`;
+    }
+    updateScores();
+    $rematch.style.display = "inline-block";
+  });
+
+  socket.on("err", (msg) => {
+    showToast(msg);
+    if (msg.includes("disconnected")) {
+      setTimeout(() => { show($lobby); }, 2000);
+    }
+  });
+
+  // ── Render ────────────────────────────────────
+  function renderBoard(board, turn, result) {
+    $board.innerHTML = "";
+    board.forEach((cell, i) => {
+      const div = document.createElement("div");
+      div.className = "cell" + (cell ? ` taken ${cell}` : "");
+      if (result && result.line && result.line.includes(i)) div.classList.add("win");
+      div.textContent = cell || "";
+      div.addEventListener("click", () => {
+        if (!cell && myTurn && !result) socket.emit("move", i);
+      });
+      $board.appendChild(div);
+    });
+
+    if (turn !== null && turn !== undefined) {
+      myTurn = turn === myIndex;
+      $status.textContent = myTurn
+        ? "Your turn (" + myMark + ")"
+        : `${players[1 - myIndex]}'s turn`;
+    }
+  }
+
+  function updateScores() {
+    document.getElementById("p1score").innerHTML =
+      `${players[0]}<span class="val">${scores[0]}</span>`;
+    document.getElementById("p2score").innerHTML =
+      `${players[1]}<span class="val">${scores[1]}</span>`;
+  }
+
+  function rematch() {
+    socket.emit("rematch");
+    $rematch.style.display = "none";
+  }
+
+  // ── Toast ─────────────────────────────────────
+  function showToast(msg) {
+    const t = document.getElementById("toast");
+    t.textContent = msg;
+    t.classList.add("show");
+    setTimeout(() => t.classList.remove("show"), 2500);
+  }
+</script>
+</body>
+</html>
